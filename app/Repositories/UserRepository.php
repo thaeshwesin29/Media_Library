@@ -6,51 +6,68 @@ use PDO;
 
 class UserRepository extends BaseRepository
 {
-    public function __construct(PDO $db)
-    {
-        parent::__construct($db);
-    }
+    protected string $table = 'users';
+    protected string $primaryKey = 'id';
 
-    public function createUser(string $name, string $email, string $password): bool
-    {
-        $stmt = $this->db->prepare("
+    /**
+     * Create user
+     */
+    public function createUser(
+        string $name,
+        string $email,
+        string $password
+    ): bool {
+
+        $sql = "
             INSERT INTO users (name, email, password)
-            VALUES (?, ?, ?)
-        ");
+            VALUES (:name, :email, :password)
+        ";
 
-        return $stmt->execute([
-            $name,
-            $email,
-            password_hash($password, PASSWORD_BCRYPT)
+        return $this->db->prepare($sql)->execute([
+            'name' => $name,
+            'email' => $email,
+            'password' => password_hash(
+                $password,
+                PASSWORD_BCRYPT
+            )
         ]);
     }
 
-    public function findByEmail(string $email): ?array
-    {
-        $stmt = $this->db->prepare("
-            SELECT * FROM users WHERE email = ?
-        ");
+    /**
+     * Find user by email
+     */
+    public function findByEmail(
+        string $email
+    ): ?array {
 
-        $stmt->execute([$email]);
+        $sql = "
+            SELECT *
+            FROM users
+            WHERE email = :email
+            LIMIT 1
+        ";
 
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return $user ?: null;
+        return $this->fetchOne($sql, [
+            'email' => $email
+        ]);
     }
 
     /**
-     * REQUIRED (fix for your error)
+     * REQUIRED by BaseRepositoryInterface
      */
-    public function getById(int $id): ?array
-    {
-        $stmt = $this->db->prepare("
-            SELECT * FROM users WHERE id = ?
-        ");
+    public function getById(
+        int $id
+    ): ?array {
 
-        $stmt->execute([$id]);
+        $sql = "
+            SELECT *
+            FROM users
+            WHERE {$this->primaryKey} = :id
+            LIMIT 1
+        ";
 
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return $user ?: null;
+        return $this->fetchOne($sql, [
+            'id' => $id
+        ]);
     }
 }

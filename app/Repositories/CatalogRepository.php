@@ -2,369 +2,250 @@
 
 namespace App\Repositories;
 
-use PDO;
-use PDOException;
 use App\Interfaces\CatalogRepositoryInterface;
 
-
- /* Handles catalog database operations
- */
 class CatalogRepository
     extends BaseRepository
     implements CatalogRepositoryInterface
 {
-    public function __construct(PDO $db)
-    {
-        parent::__construct($db);
+    protected string $table = 'view_catalog';
+
+    protected string $primaryKey = 'media_id';
+
+    public function getAll(
+        ?int $limit = null,
+        int $offset = 0
+    ): array {
+
+        $sql = "
+            SELECT
+                media_id,
+                title,
+                category,
+                img
+            FROM {$this->table}
+
+            ORDER BY
+                REPLACE(
+                    REPLACE(
+                        REPLACE(title, 'The ', ''),
+                    'An ', ''),
+                'A ', '')
+        ";
+
+        $sql .= $this->buildLimitOffset(
+            $limit,
+            $offset
+        );
+
+        return $this->fetchAll($sql);
     }
 
-    
-     /* Get catalog items by category
-     */
-    public function getCategoryCatalog(
-        $category,
-        $limit = null,
-        $offset = 0
-    ) {
-        try {
-            $result = $this->db->prepare(
-                "CALL sp_get_catalog(?, ?, ?)"
-            );
+    public function count(
+        array $filters = []
+    ): int {
 
-            $result->bindParam(
-                1,
-                $category,
-                PDO::PARAM_STR
-            );
+        $search = $filters['search'] ?? null;
+        $category = $filters['category'] ?? null;
 
-            $result->bindParam(
-                2,
-                $limit,
-                $limit === null
-                    ? PDO::PARAM_NULL
-                    : PDO::PARAM_INT
-            );
+        $sql = "
+            SELECT COUNT(DISTINCT vc.media_id)
 
-            $result->bindParam(
-                3,
-                $offset,
-                PDO::PARAM_INT
-            );
+            FROM view_catalog vc
 
-            $result->execute();
+            WHERE 1 = 1
+        ";
 
-            $catalog = $result->fetchAll();
+        $params = [];
 
-            $result->closeCursor();
+        if ($search !== null) {
 
-            return $catalog;
-        } catch (PDOException $e) {
-            $errorMessage = $e->getMessage();
-            if (stripos($errorMessage, 'sp_get_catalog') !== false || stripos($errorMessage, 'procedure') !== false) {
-                return $this->getCategoryFromCatalogView($category, $limit, $offset);
-            }
+            $sql .= "
+                AND (
+                    vc.title LIKE :search
 
-            throw $e;
+                    OR EXISTS (
+                        SELECT 1
+                        FROM Media_People mp
+                        JOIN People p
+                            ON p.people_id = mp.people_id
+                        WHERE
+                            mp.media_id = vc.media_id
+                            AND p.fullname LIKE :search
+                    )
+                )
+            ";
+
+            $params['search'] = "%{$search}%";
         }
-    }
 
-    private function getCategoryFromCatalogView(
-        $category,
-        $limit = null,
-        $offset = 0
-    ) {
-        $query = <<<'SQL'
-SELECT
-    media_id,
-    title,
-    category,
-    img
-FROM view_catalog
-WHERE (
-    :category IS NULL
-    OR LOWER(category) = LOWER(:category)
-)
-ORDER BY
-    REPLACE(
-        REPLACE(
-            REPLACE(title, 'The ', ''),
-        'An ', ''),
-    'A ', '')
-LIMIT :limit OFFSET :offset
-SQL;
+        if ($category !== null) {
 
-        $result = $this->db->prepare($query);
+            $sql .= "
+                AND LOWER(vc.category)
+                    = LOWER(:category)
+            ";
 
-        $result->bindValue(
-            ':category',
-            $category,
-            $category === null
-                ? PDO::PARAM_NULL
-                : PDO::PARAM_STR
-        );
-
-        $result->bindValue(
-            ':limit',
-            $limit ?? PHP_INT_MAX,
-            PDO::PARAM_INT
-        );
-
-        $result->bindValue(
-            ':offset',
-            $offset,
-            PDO::PARAM_INT
-        );
-
-        $result->execute();
-        $catalog = $result->fetchAll();
-        $result->closeCursor();
-
-        return $catalog;
-    }
-
-    
-     /* Search catalog
-     */
-    public function getSearchCatalog(
-        $search,
-        $category = null,
-        $limit = null,
-        $offset = 0
-    ) {
-        $search = ($search === '' ? null : $search);
-        $category = ($category === '' ? null : $category);
-
-        try {
-            $result = $this->db->prepare(
-                "CALL sp_search_catalog(?, ?, ?, ?)"
-            );
-
-            $result->bindValue(
-                1,
-                $search,
-                $search === null
-                    ? PDO::PARAM_NULL
-                    : PDO::PARAM_STR
-            );
-
-            $result->bindValue(
-                2,
-                $category,
-                $category === null
-                    ? PDO::PARAM_NULL
-                    : PDO::PARAM_STR
-            );
-
-            $result->bindValue(
-                3,
-                $limit,
-                PDO::PARAM_INT
-            );
-
-            $result->bindValue(
-                4,
-                $offset,
-                PDO::PARAM_INT
-            );
-
-            $result->execute();
-
-            $catalog = $result->fetchAll();
-
-            $result->nextRowset();
-            $result->closeCursor();
-
-            return $catalog;
-        } catch (PDOException $e) {
-            $errorMessage = $e->getMessage();
-            if (stripos($errorMessage, 'sp_search_catalog') !== false || stripos($errorMessage, 'procedure') !== false) {
-                return $this->getSearchCatalogFromCatalogView($search, $category, $limit, $offset);
-            }
-
-            throw $e;
+            $params['category'] = $category;
         }
+
+        return $this->fetchCount(
+            $sql,
+            $params
+        );
     }
 
-    private function getSearchCatalogFromCatalogView(
-        $search,
-        $category,
-        $limit = null,
-        $offset = 0
-    ) {
-        $query = <<<'SQL'
-SELECT DISTINCT
-    vc.media_id,
-    vc.title,
-    vc.category,
-    vc.img
-FROM view_catalog vc
-WHERE (
-        :search IS NULL
-        OR :search = ''
-        OR vc.title LIKE CONCAT('%', :search, '%')
-        OR EXISTS (
-            SELECT 1
-            FROM Media_People mp
-            JOIN People p
-                ON p.people_id = mp.people_id
-            WHERE
-                mp.media_id = vc.media_id
-                AND p.fullname LIKE CONCAT('%', :search, '%')
-        )
-    )
-    AND (
-        :category IS NULL
-        OR LOWER(vc.category) = LOWER(:category)
-    )
-ORDER BY
-    REPLACE(
-        REPLACE(
-            REPLACE(vc.title, 'The ', ''),
-        'An ', ''),
-    'A ', '')
-LIMIT :limit OFFSET :offset
-SQL;
+    public function search(
+        ?string $search = null,
+        ?string $category = null,
+        ?int $limit = null,
+        int $offset = 0
+    ): array {
 
-        $result = $this->db->prepare($query);
+        $sql = "
+            SELECT DISTINCT
+                vc.media_id,
+                vc.title,
+                vc.category,
+                vc.img
 
-        $result->bindValue(
-            ':search',
-            $search,
-            $search === null
-                ? PDO::PARAM_NULL
-                : PDO::PARAM_STR
+            FROM view_catalog vc
+
+            WHERE 1 = 1
+        ";
+
+        $params = [];
+
+        if ($search !== null) {
+
+            $sql .= "
+                AND (
+                    vc.title LIKE :search
+
+                    OR EXISTS (
+                        SELECT 1
+                        FROM Media_People mp
+                        JOIN People p
+                            ON p.people_id = mp.people_id
+                        WHERE
+                            mp.media_id = vc.media_id
+                            AND p.fullname LIKE :search
+                    )
+                )
+            ";
+
+            $params['search'] = "%{$search}%";
+        }
+
+        if ($category !== null) {
+
+            $sql .= "
+                AND LOWER(vc.category)
+                    = LOWER(:category)
+            ";
+
+            $params['category'] = $category;
+        }
+
+        $sql .= "
+            ORDER BY
+                REPLACE(
+                    REPLACE(
+                        REPLACE(vc.title, 'The ', ''),
+                    'An ', ''),
+                'A ', '')
+        ";
+
+        $sql .= $this->buildLimitOffset(
+            $limit,
+            $offset
         );
 
-        $result->bindValue(
-            ':category',
+        return $this->fetchAll(
+            $sql,
+            $params
+        );
+    }
+
+    public function getByCategory(
+        string $category,
+        ?int $limit = null,
+        int $offset = 0
+    ): array {
+
+        return $this->search(
+            null,
             $category,
-            $category === null
-                ? PDO::PARAM_NULL
-                : PDO::PARAM_STR
+            $limit,
+            $offset
         );
-
-        $result->bindValue(
-            ':limit',
-            $limit ?? PHP_INT_MAX,
-            PDO::PARAM_INT
-        );
-
-        $result->bindValue(
-            ':offset',
-            $offset,
-            PDO::PARAM_INT
-        );
-
-        $result->execute();
-        $catalog = $result->fetchAll();
-        $result->closeCursor();
-
-        return $catalog;
     }
 
-    
-     /* Get random catalog items
-     */
-    public function getRandomCatalog()
+    public function getRandom(): array
     {
-        $result = $this->db->query(
-            "SELECT * FROM view_random"
-        );
-
-        return $result->fetchAll();
+        return $this->fetchAll("
+            SELECT *
+            FROM view_random
+        ");
     }
 
-    /**
-     * Get single item by ID
-     */
     public function getById(
-    int $id
-): ?array
-{
-    try {
-        $result = $this->db->prepare(
-            "CALL sp_get_item_full_detail(?)"
+        int $id
+    ): ?array {
+
+        $sql = "
+            SELECT
+                media_id,
+                title,
+                category,
+                img,
+                format,
+                year,
+                genre,
+                publisher,
+                isbn,
+                fullname,
+                role
+
+            FROM view_item_detail
+
+            WHERE media_id = :id
+        ";
+
+        $rows = $this->fetchAll(
+            $sql,
+            ['id' => $id]
         );
 
-        $result->bindParam(
-            1,
-            $id,
-            PDO::PARAM_INT
-        );
-
-        $result->execute();
-
-        $item = $result->fetch(PDO::FETCH_ASSOC);
-
-        if ($item === false) {
-            $result->closeCursor();
+        if (empty($rows)) {
             return null;
         }
 
-        $result->nextRowset();
+        $item = [
+            'media_id' => $rows[0]['media_id'],
+            'title' => $rows[0]['title'],
+            'category' => $rows[0]['category'],
+            'img' => $rows[0]['img'],
+            'format' => $rows[0]['format'],
+            'year' => $rows[0]['year'],
+            'genre' => $rows[0]['genre'],
+            'publisher' => $rows[0]['publisher'],
+            'isbn' => $rows[0]['isbn'],
+        ];
 
-        while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
-            $item[strtolower($row['role'])][] =
-                $row['fullname'];
-        }
+        foreach ($rows as $row) {
 
-        $result->closeCursor();
+            if (
+                !empty($row['role'])
+                && !empty($row['fullname'])
+            ) {
 
-        return $item;
-    } catch (PDOException $e) {
-        $errorMessage = $e->getMessage();
-        if (stripos($errorMessage, 'sp_get_item_full_detail') !== false || stripos($errorMessage, 'procedure') !== false) {
-            return $this->getItemDetailFromView($id);
-        }
-
-        throw $e;
-    }
-}
-
-    private function getItemDetailFromView(int $id): ?array
-    {
-        $query = <<<'SQL'
-SELECT
-    media_id,
-    title,
-    category,
-    img,
-    format,
-    year,
-    genre,
-    publisher,
-    isbn,
-    fullname,
-    role
-FROM view_item_detail
-WHERE media_id = :id
-SQL;
-
-        $result = $this->db->prepare($query);
-        $result->bindValue(':id', $id, PDO::PARAM_INT);
-        $result->execute();
-
-        $item = null;
-        while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
-            if ($item === null) {
-                $item = [
-                    'media_id' => $row['media_id'],
-                    'title' => $row['title'],
-                    'category' => $row['category'],
-                    'img' => $row['img'],
-                    'format' => $row['format'],
-                    'year' => $row['year'],
-                    'genre' => $row['genre'],
-                    'publisher' => $row['publisher'],
-                    'isbn' => $row['isbn'],
-                ];
+                $item[
+                    strtolower($row['role'])
+                ][] = $row['fullname'];
             }
-
-            $item[strtolower($row['role'])][] = $row['fullname'];
         }
 
-        $result->closeCursor();
-
         return $item;
-}
+    }
 }

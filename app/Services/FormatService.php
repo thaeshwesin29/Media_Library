@@ -26,21 +26,18 @@ class FormatService
         $this->repo = $repo;
     }
 
-    // Get format dropdown data
-    function format_array($category = null)
-    {
-        return $this->repo->get_format_drop_down($category);
-    }
+   function category_drop_down()
+{
+    return $this->repo->getCategoryDropDown();
+}
 
-    // Get category dropdown data
-    function category_drop_down()
-    {
-        return $this->repo->get_category_drop_down();
-    }
+function format_array($category = null)
+{
+    return $this->repo->getFormatDropDown($category);
+}
 
-    // Get genres dropdown data
-    function genres_array($category = null)
-    {
-        return $this->repo->get_genres_drop_down($category);
-    }
+function genres_array($category = null)
+{
+    return $this->repo->getGenresDropDown($category);
+}
 }

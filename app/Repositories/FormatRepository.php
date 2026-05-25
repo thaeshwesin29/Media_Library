@@ -3,152 +3,180 @@
 namespace App\Repositories;
 
 use PDO;
-use PDOException;
 use App\Interfaces\FormatRepositoryInterface;
 
-class FormatRepository implements FormatRepositoryInterface
+class FormatRepository
+    extends BaseRepository
+    implements FormatRepositoryInterface
 {
-    private PDO $db;
-
     public function __construct(PDO $db)
     {
-        $this->db = $db;
+        parent::__construct($db);
     }
 
-    // Get formats based on selected category
-    function get_format_drop_down($category = null)
-    {
+    /**
+     * Formats dropdown
+     */
+    public function getFormatDropDown(
+        ?string $category = null
+    ): array {
+
         try {
-            $result = $this->db->prepare("CALL sp_get_formats_by_category(:category)");
 
-            $result->bindValue(
-                ':category',
-                $category,
-                $category === null ? PDO::PARAM_NULL : PDO::PARAM_STR
-            );
+            $sql = "
+                CALL sp_get_formats_by_category(:category)
+            ";
 
-            $result->execute();
-        } catch (PDOException $e) {
-            $errorMessage = $e->getMessage();
-            if (stripos($errorMessage, 'sp_get_formats_by_category') !== false || stripos($errorMessage, 'procedure') !== false) {
-                return $this->getFormatsFromCatalogView($category);
+            $rows = $this->fetchAll($sql, [
+                'category' => $category
+            ]);
+
+        } catch (\PDOException $e) {
+
+            if ($this->isMissingProcedure($e, 'sp_get_formats_by_category')) {
+                return $this->getFormatsFromView($category);
             }
 
             throw $e;
         }
 
-        $format = array();
-
-        while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
-            $format[$row['category']][] = $row['format'];
-        }
-
-        $result->closeCursor();
-
-        return $format;
+        return $this->groupFormats($rows);
     }
 
-    private function getFormatsFromCatalogView($category = null)
+    /**
+     * Fallback (VIEW)
+     */
+    private function getFormatsFromView(
+        ?string $category
+    ): array {
+
+        $sql = "
+            SELECT DISTINCT
+                LOWER(category) AS category,
+                format
+            FROM view_catalog
+            WHERE
+                :category IS NULL
+                OR LOWER(category) = LOWER(:category)
+            ORDER BY category, format
+        ";
+
+        $rows = $this->fetchAll($sql, [
+            'category' => $category
+        ]);
+
+        return $this->groupFormats($rows);
+    }
+
+    /**
+     * Category dropdown
+     */
+    public function getCategoryDropDown(): array
     {
-        $query = <<<'SQL'
-SELECT DISTINCT
-    LOWER(category) AS category,
-    format
-FROM view_catalog
-WHERE
-    :category IS NULL
-    OR LOWER(category) = LOWER(:category)
-ORDER BY category, format
-SQL;
+        $sql = "
+            SELECT DISTINCT category
+            FROM view_catalog
+            ORDER BY category
+        ";
 
-        $result = $this->db->prepare($query);
-        $result->bindValue(
-            ':category',
-            $category,
-            $category === null ? PDO::PARAM_NULL : PDO::PARAM_STR
-        );
-        $result->execute();
+        return $this->db
+            ->query($sql)
+            ->fetchAll(PDO::FETCH_COLUMN);
+    }
 
+    /**
+     * Genres dropdown
+     */
+    public function getGenresDropDown(
+        ?string $category = null
+    ): array {
+
+        try {
+
+            $sql = "
+                CALL sp_get_genres_by_category(:category)
+            ";
+
+            $rows = $this->fetchAll($sql, [
+                'category' => $category
+            ]);
+
+        } catch (\PDOException $e) {
+
+            if ($this->isMissingProcedure($e, 'sp_get_genres_by_category')) {
+                return $this->getGenresFromView($category);
+            }
+
+            throw $e;
+        }
+
+        return $this->groupGenres($rows);
+    }
+
+    /**
+     * Fallback genres view
+     */
+    private function getGenresFromView(
+        ?string $category
+    ): array {
+
+        $sql = "
+            SELECT DISTINCT
+                LOWER(category) AS category,
+                genre
+            FROM view_catalog
+            WHERE
+                :category IS NULL
+                OR LOWER(category) = LOWER(:category)
+            ORDER BY category, genre
+        ";
+
+        $rows = $this->fetchAll($sql, [
+            'category' => $category
+        ]);
+
+        return $this->groupGenres($rows);
+    }
+
+    /**
+     * Helper: group formats
+     */
+    private function groupFormats(array $rows): array
+    {
         $format = [];
-        while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
+
+        foreach ($rows as $row) {
             $format[$row['category']][] = $row['format'];
         }
 
-        $result->closeCursor();
         return $format;
     }
 
-    // Get all unique categories
-    function get_category_drop_down()
+    /**
+     * Helper: group genres
+     */
+    private function groupGenres(array $rows): array
     {
-        $sql = " SELECT DISTINCT category FROM view_catalog ORDER BY category";
-
-        $result = $this->db->prepare($sql);
-        $result->execute();
-
-        return $result->fetchAll(PDO::FETCH_COLUMN);
-    }
-
-    // Get genres based on selected category
-    function get_genres_drop_down($category = null)
-    {
-        try {
-            $result = $this->db->prepare("CALL sp_get_genres_by_category(:category)");
-
-            $result->bindValue(
-                ':category',
-                $category,
-                $category === null ? PDO::PARAM_NULL : PDO::PARAM_STR
-            );
-
-            $result->execute();
-        } catch (PDOException $e) {
-            $errorMessage = $e->getMessage();
-            if (stripos($errorMessage, 'sp_get_genres_by_category') !== false || stripos($errorMessage, 'procedure') !== false) {
-                return $this->getGenresFromCatalogView($category);
-            }
-
-            throw $e;
-        }
-
-        $genre = array();
-
-        while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
-            $genre[$row['category']][] = $row['genre'];
-        }
-
-        $result->closeCursor();
-
-        return $genre;
-    }
-
-    private function getGenresFromCatalogView($category = null)
-    {
-        $query = <<<'SQL'
-SELECT DISTINCT
-    LOWER(category) AS category,
-    genre
-FROM view_catalog
-WHERE
-    :category IS NULL
-    OR LOWER(category) = LOWER(:category)
-ORDER BY category, genre
-SQL;
-
-        $result = $this->db->prepare($query);
-        $result->bindValue(
-            ':category',
-            $category,
-            $category === null ? PDO::PARAM_NULL : PDO::PARAM_STR
-        );
-        $result->execute();
-
         $genre = [];
-        while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
+
+        foreach ($rows as $row) {
             $genre[$row['category']][] = $row['genre'];
         }
 
-        $result->closeCursor();
         return $genre;
+    }
+
+    /**
+     * Helper: detect missing procedure
+     */
+    private function isMissingProcedure(
+        \PDOException $e,
+        string $procedure
+    ): bool {
+
+        $msg = $e->getMessage();
+
+        return str_contains($msg, $procedure)
+            || str_contains($msg, 'procedure');
     }
 }

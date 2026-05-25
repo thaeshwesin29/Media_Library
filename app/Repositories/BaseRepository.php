@@ -3,199 +3,146 @@
 namespace App\Repositories;
 
 use PDO;
-use PDOException;
-use App\Interfaces\BaseInterface;
 
-abstract class BaseRepository implements BaseInterface
+abstract class BaseRepository
 {
     protected PDO $db;
+
+    protected string $table;
+
+    protected string $primaryKey = 'id';
 
     public function __construct(PDO $db)
     {
         $this->db = $db;
     }
 
-    public function count(
-        array $filters = []
-    ): int {
+    /**
+     * Execute INSERT / UPDATE / DELETE
+     */
+    protected function execute(
+        string $sql,
+        array $params = []
+    ): bool {
 
-        $search = $filters['search'] ?? null;
-        $category = $filters['category'] ?? null;
+        $stmt = $this->db->prepare($sql);
 
-        try {
-            $result = $this->db->prepare(
-                "CALL sp_search_catalog_count(
-                    :search,
-                    :category
-                )"
-            );
+        $this->bindValues($stmt, $params);
 
-            $result->bindValue(
-                ':search',
-                $search,
-                $search === null
-                    ? PDO::PARAM_NULL
-                    : PDO::PARAM_STR
-            );
-
-            $result->bindValue(
-                ':category',
-                $category,
-                $category === null
-                    ? PDO::PARAM_NULL
-                    : PDO::PARAM_STR
-            );
-
-            $result->execute();
-
-            $count = $result->fetchColumn();
-
-            $result->nextRowset();
-            $result->closeCursor();
-
-            return (int) $count;
-        } catch (PDOException $e) {
-            $errorMessage = $e->getMessage();
-            if (strpos($errorMessage, 'sp_search_catalog_count') !== false || strpos($errorMessage, 'PROCEDURE') !== false) {
-                return $this->countFromCatalogView($search, $category);
-            }
-
-            throw $e;
-        }
+        return $stmt->execute();
     }
 
-    private function countFromCatalogView(
-        ?string $search,
-        ?string $category
-    ): int {
-        $query = <<<SQL
-SELECT COUNT(DISTINCT vc.media_id) AS total
-FROM view_catalog vc
-WHERE (
-        :search IS NULL
-        OR :search = ''
-        OR vc.title LIKE CONCAT('%', :search, '%')
-        OR EXISTS (
-            SELECT 1
-            FROM Media_People mp
-            JOIN People p ON p.people_id = mp.people_id
-            WHERE mp.media_id = vc.media_id
-              AND p.fullname LIKE CONCAT('%', :search, '%')
-        )
-    )
-    AND (
-        :category IS NULL
-        OR LOWER(vc.category) = LOWER(:category)
-    );
-SQL;
-
-        $result = $this->db->prepare($query);
-
-        $result->bindValue(
-            ':search',
-            $search,
-            $search === null
-                ? PDO::PARAM_NULL
-                : PDO::PARAM_STR
-        );
-
-        $result->bindValue(
-            ':category',
-            $category,
-            $category === null
-                ? PDO::PARAM_NULL
-                : PDO::PARAM_STR
-        );
-
-        $result->execute();
-        $count = $result->fetchColumn();
-        $result->closeCursor();
-
-        return (int) $count;
-    }
-
-    public function getAll(
-        ?int $limit = null,
-        int $offset = 0
+    /**
+     * Fetch all rows
+     */
+    protected function fetchAll(
+        string $sql,
+        array $params = []
     ): array {
-        try {
-            $result = $this->db->prepare(
-                "CALL sp_get_full_catalog(?, ?)"
-            );
 
-            $result->bindParam(
-                1,
-                $limit,
-                $limit === null
-                    ? PDO::PARAM_NULL
-                    : PDO::PARAM_INT
-            );
+        $stmt = $this->db->prepare($sql);
 
-            $result->bindParam(
-                2,
-                $offset,
-                PDO::PARAM_INT
-            );
+        $this->bindValues($stmt, $params);
 
-            $result->execute();
+        $stmt->execute();
 
-            $catalog = $result->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
-            $result->closeCursor();
+    /**
+     * Fetch single row
+     */
+    protected function fetchOne(
+        string $sql,
+        array $params = []
+    ): ?array {
 
-            return $catalog;
-        } catch (PDOException $e) {
-            $errorMessage = $e->getMessage();
-            if (stripos($errorMessage, 'sp_get_full_catalog') !== false || stripos($errorMessage, 'procedure') !== false) {
-                return $this->getAllFromCatalogView($limit, $offset);
+        $stmt = $this->db->prepare($sql);
+
+        $this->bindValues($stmt, $params);
+
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result ?: null;
+    }
+
+    /**
+     * Fetch count
+     */
+    protected function fetchCount(
+        string $sql,
+        array $params = []
+    ): int {
+
+        $stmt = $this->db->prepare($sql);
+
+        $this->bindValues($stmt, $params);
+
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * DRY parameter binding (IMPROVED)
+     */
+    protected function bindValues($stmt, array $params): void
+    {
+        foreach ($params as $key => $value) {
+
+            if (is_int($key)) {
+                $paramKey = $key + 1; // positional SQL
+            } else {
+                $paramKey = ':' . $key; // named SQL
             }
 
-            throw $e;
+            $type = match (true) {
+                is_int($value) => PDO::PARAM_INT,
+                is_bool($value) => PDO::PARAM_BOOL,
+                $value === null => PDO::PARAM_NULL,
+                default => PDO::PARAM_STR
+            };
+
+            $stmt->bindValue($paramKey, $value, $type);
         }
     }
 
-    private function getAllFromCatalogView(
+    /**
+     * Pagination helper
+     */
+    protected function buildLimitOffset(
         ?int $limit,
         int $offset
-    ): array {
-        $query = <<<'SQL'
-SELECT
-    media_id,
-    title,
-    category,
-    img
-FROM view_catalog
-ORDER BY
-    REPLACE(
-        REPLACE(
-            REPLACE(title, 'The ', ''),
-        'An ', ''),
-    'A ', '')
-LIMIT :limit OFFSET :offset
-SQL;
+    ): string {
 
-        $result = $this->db->prepare($query);
+        if ($limit === null) {
+            return '';
+        }
 
-        $result->bindValue(
-            ':limit',
-            $limit ?? PHP_INT_MAX,
-            PDO::PARAM_INT
-        );
-
-        $result->bindValue(
-            ':offset',
-            $offset,
-            PDO::PARAM_INT
-        );
-
-        $result->execute();
-        $catalog = $result->fetchAll();
-        $result->closeCursor();
-
-        return $catalog;
+        return " LIMIT {$limit} OFFSET {$offset} ";
     }
 
-    abstract public function getById(
-        int $id
-    ): ?array;
+    /**
+     * Transaction helper (VERY USEFUL)
+     */
+    protected function transaction(callable $callback)
+    {
+        try {
+            $this->db->beginTransaction();
+
+            $result = $callback($this);
+
+            $this->db->commit();
+
+            return $result;
+
+        } catch (\Throwable $e) {
+
+            $this->db->rollBack();
+
+            throw $e;
+        }
+    }
 }

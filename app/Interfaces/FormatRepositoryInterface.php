@@ -4,9 +4,9 @@ namespace App\Interfaces;
 
 interface FormatRepositoryInterface
 {
-    public function get_format_drop_down($category = null);
+    public function getFormatDropDown(?string $category = null): array;
 
-    public function get_category_drop_down();
+    public function getCategoryDropDown(): array;
 
-    public function get_genres_drop_down($category = null);
+    public function getGenresDropDown(?string $category = null): array;
 }
