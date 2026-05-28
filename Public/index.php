@@ -11,7 +11,7 @@ ini_set('display_errors', 1);
 |--------------------------------------------------------------------------
 */
 define('BASE_PATH', dirname(__DIR__));
-define('BASE_URL', 'http://localhost:8080/MediaLibrary-MVC-');
+define('BASE_URL', 'http://localhost:8080');
 
 /*
 |--------------------------------------------------------------------------
@@ -19,7 +19,8 @@ define('BASE_URL', 'http://localhost:8080/MediaLibrary-MVC-');
 |--------------------------------------------------------------------------
 */
 require_once BASE_PATH . '/vendor/autoload.php';
-session_start(); // ✅ MUST BE HERE
+session_start();
+
 /*
 |--------------------------------------------------------------------------
 | ENV
@@ -42,6 +43,7 @@ use App\Controllers\CatalogController;
 use App\Controllers\DetailsController;
 use App\Controllers\AuthController;
 use App\Controllers\SuggestController;
+use App\Controllers\Api\ApiUserController;
 
 use App\Repositories\CatalogRepository;
 use App\Repositories\FormatRepository;
@@ -50,7 +52,9 @@ use App\Repositories\UserRepository;
 use App\Services\CatalogService;
 use App\Services\FormatService;
 use App\Services\UserService;
-use App\Controllers\Api\ApiUserController;
+
+use App\Validation\Validator;
+
 /*
 |--------------------------------------------------------------------------
 | DB CONNECTION
@@ -74,7 +78,19 @@ $userRepo    = new UserRepository($db);
 */
 $catalogService = new CatalogService($catalogRepo);
 $formatService  = new FormatService($formatRepo);
-$userService    = new UserService($userRepo);
+
+/*
+| IMPORTANT FIX: ADD VALIDATOR
+*/
+$validator = new Validator();
+
+/*
+| FIXED: UserService now requires 2 arguments
+*/
+$userService = new UserService(
+    $userRepo,
+    $validator
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -93,6 +109,7 @@ $router->registerService(DetailsController::class, $catalogService);
 $router->registerService(SuggestController::class, $formatService);
 $router->registerService(AuthController::class, $userService);
 $router->registerService(ApiUserController::class, $userService);
+
 /*
 |--------------------------------------------------------------------------
 | ROUTES

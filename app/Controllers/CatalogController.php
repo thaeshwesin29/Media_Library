@@ -21,12 +21,14 @@ class CatalogController extends BaseController
      */
     public function home(): void
     {
+        $this->requireLogin();
+
         $data = $this->catalogService
             ->getHomePageData();
 
         // Current logged in user
         $data['user'] = $this->user();
-
+        
         $this->view(
             'home',
             $data

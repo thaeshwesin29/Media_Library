@@ -2,6 +2,8 @@
 
 namespace App\Controllers;
 
+use App\DTO\UserDTO;
+
 /**
  * Base Controller
  * Shared helper methods for all controllers
@@ -57,33 +59,32 @@ abstract class BaseController
         return $_POST[$key] ?? $default;
     }
 
- protected function requireLogin(): void
-{
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+    protected function requireLogin(): void
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if (!isset($_SESSION['user'])) {
+            $_SESSION['error'] = 'Please login first';
+            $this->redirect('index.php?page=login');
+        }
     }
 
-    if (!isset($_SESSION['user'])) {
-        $_SESSION['error'] = 'Please login first';
-        $this->redirect('index.php?page=login');
+    protected function guestOnly(): void
+    {
+        if (isset($_SESSION['user'])) {
+            $this->redirect('index.php?page=catalog');
+        }
     }
-}
-
-protected function guestOnly(): void
-{
-    if (isset($_SESSION['user'])) {
-        $this->redirect('index.php?page=catalog');
-    }
-}
 
     /**
      * Get current logged in user
      */
-    protected function user(): ?array
-    {
-        return $_SESSION['user'] ?? null;
-    }
-
+   protected function user(): ?UserDTO
+{
+    return $_SESSION['user'] ?? null;
+}
     /**
      * Check authentication status
      */

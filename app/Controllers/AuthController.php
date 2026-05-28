@@ -1,105 +1,61 @@
 <?php
 
-namespace App\Controllers;
+namespace App\Repositories;
 
-use App\Services\UserService;
+use App\Models\User;
 
-class AuthController extends BaseController
+class UserRepository extends BaseRepository
 {
-    private UserService $userService;
+    protected string $table = 'users';
+    protected string $primaryKey = 'id';
 
-    public function __construct(UserService $userService)
+    // =========================
+    // MAP ROW → MODEL
+    // =========================
+    private function map(array $row): User
     {
-        $this->userService = $userService;
+        $user = new User();
+
+        $user->setId((int)($row['id'] ?? 0));
+        $user->setName($row['name'] ?? '');
+        $user->setEmail($row['email'] ?? '');
+        $user->setPasswordHash($row['password'] ?? '');
+        $user->setCreatedAt($row['created_at'] ?? null);
+
+        return $user;
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | SHOW LOGIN PAGE
-    |--------------------------------------------------------------------------
-    */
-    public function showLogin(): void
+    // =========================
+    // FIND BY EMAIL
+    // =========================
+    public function findByEmail(string $email): ?User
     {
-        $this->view('auth/login');
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | SHOW REGISTER PAGE
-    |--------------------------------------------------------------------------
-    */
-    public function showRegister(): void
-    {
-        $this->view('auth/register');
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | REGISTER USER
-    |--------------------------------------------------------------------------
-    */
-    public function register(): void
-    {
-        $data = $_POST;
-
-        if ($data['password'] !== $data['confirm_password']) {
-            $this->view('auth/register', [
-                'error' => 'Passwords do not match'
-            ]);
-            return;
-        }
-
-        $this->userService->createUser($data);
-
-        header("Location: index.php?page=login");
-        exit;
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOGIN USER
-    |--------------------------------------------------------------------------
-    */
-    public function login(): void
-    {
-        $user = $this->userService->login(
-            $_POST['email'],
-            $_POST['password']
+        $row = $this->fetchOne(
+            "SELECT * FROM {$this->table} WHERE email = :email LIMIT 1",
+            ['email' => $email]
         );
 
-        if (!$user) {
-            $this->view('auth/login', [
-                'error' => 'Invalid email or password'
-            ]);
-            return;
-        }
-
-        session_start();
-        $_SESSION['user'] = $user;
-
-        header("Location: index.php?page=home");
-        exit;
+        return $row ? $this->map($row) : null;
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | SHOW LOGIN PAGE (alias safety optional)
-    |--------------------------------------------------------------------------
-    */
-    public function showRegisterPage(): void
+    // =========================
+    // FIND BY ID
+    // =========================
+    public function findById(int $id): ?User
     {
-        $this->showRegister();
+        $row = $this->getById($id);
+        return $row ? $this->map($row) : null;
     }
 
-    public function logout(): void
-{
-    session_start();
-
-    $_SESSION = [];
-
-    session_destroy();
-
-    header("Location: index.php?page=login");
-    exit;
-}
+    // =========================
+    // INSERT USER
+    // =========================
+    public function insertUser(User $user): bool
+    {
+        return $this->create([
+            'name' => $user->getName(),
+            'email' => $user->getEmail(),
+            'password' => $user->getPasswordHash(),
+        ]);
+    }
 }

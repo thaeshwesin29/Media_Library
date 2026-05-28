@@ -5,8 +5,7 @@
 
     <title><?= htmlspecialchars($pageTitle ?? 'Media Library') ?></title>
 
-    <!-- FIXED CSS PATH -->
-    <link rel="stylesheet" href="<?= BASE_URL ?>/Public/css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 
 <body>
@@ -17,66 +16,61 @@
 <header class="header">
     <div class="wrapper">
 
-        <!-- LOGO -->
         <h1 class="logo">
-            <a href="<?= BASE_URL ?>/Public/index.php?page=home">
-
-                <!-- FIXED IMAGE PATH -->
-                <img src="<?= BASE_URL ?>/Public/img/Brand-title.png" alt="Media Library">
-
+            <a href="/index.php?page=home">
+                <img src="/img/Brand-title.png" alt="Media Library">
             </a>
         </h1>
 
-        <!-- NAVIGATION -->
         <ul class="nav">
 
             <li class="<?= ($section === 'books') ? 'on' : '' ?>">
-                <a href="<?= BASE_URL ?>/Public/index.php?page=catalog&cat=books">
-
-                    <img src="<?= BASE_URL ?>/Public/img/book.png">
+                <a href="/index.php?page=catalog&cat=books">
+                    <img src="/img/book.png">
                     Books
-
                 </a>
             </li>
 
             <li class="<?= ($section === 'movies') ? 'on' : '' ?>">
-                <a href="<?= BASE_URL ?>/Public/index.php?page=catalog&cat=movies">
-
-                    <img src="<?= BASE_URL ?>/Public/img/movie.png">
+                <a href="/index.php?page=catalog&cat=movies">
+                    <img src="/img/movie.png">
                     Movies
-
                 </a>
             </li>
 
             <li class="<?= ($section === 'music') ? 'on' : '' ?>">
-                <a href="<?= BASE_URL ?>/Public/index.php?page=catalog&cat=music">
-
-                    <img src="<?= BASE_URL ?>/Public/img/music.png">
+                <a href="/index.php?page=catalog&cat=music">
+                    <img src="/img/music.png">
                     Music
-
                 </a>
             </li>
 
             <li class="<?= ($section === 'suggest') ? 'on' : '' ?>">
-                <a href="<?= BASE_URL ?>/Public/index.php?page=suggest">
-
-                    <img src="<?= BASE_URL ?>/Public/img/suggestion.png">
+                <a href="/index.php?page=suggest">
+                    <img src="/img/suggestion.png">
                     Suggest
-
                 </a>
             </li>
 
-            <!-- AUTH SECTION -->
             <?php if (!empty($_SESSION['user'])): ?>
+
+                <?php
+                    // SAFE SUPPORT FOR DTO OR ARRAY
+                    $user = $_SESSION['user'];
+
+                    $userName = is_object($user)
+                        ? ($user->name ?? 'User')
+                        : ($user['name'] ?? 'User');
+                ?>
 
                 <li>
                     <span style="color:#fff;">
-                        👤 <?= htmlspecialchars($_SESSION['user']['name']) ?>
+                        👤 <?= htmlspecialchars($userName) ?>
                     </span>
                 </li>
 
                 <li>
-                    <a href="<?= BASE_URL ?>/Public/index.php?page=logout">
+                    <a href="/index.php?page=logout">
                         Logout
                     </a>
                 </li>
@@ -84,13 +78,13 @@
             <?php else: ?>
 
                 <li>
-                    <a href="<?= BASE_URL ?>/Public/index.php?page=login">
-                         Login
+                    <a href="/index.php?page=login">
+                        Login
                     </a>
                 </li>
 
                 <li>
-                    <a href="<?= BASE_URL ?>/Public/index.php?page=register">
+                    <a href="/index.php?page=register">
                         Register
                     </a>
                 </li>
@@ -102,13 +96,12 @@
     </div>
 </header>
 
-<!-- SEARCH BAR -->
 <?php if (empty($hideSearch)): ?>
 
 <div class="search">
     <div class="wrapper">
 
-        <form method="get" action="<?= BASE_URL ?>/Public/index.php">
+        <form method="get" action="/index.php">
 
             <input type="hidden" name="page" value="catalog">
 

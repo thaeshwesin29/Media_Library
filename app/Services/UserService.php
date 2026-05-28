@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Repositories\UserRepository;
+use App\DTO\UserDTO;
+use App\Core\ApiResponse;
 
 class UserService
 {
@@ -15,42 +17,62 @@ class UserService
 
     /*
     |--------------------------------------------------------------------------
-    | GET ALL USERS
+    | REGISTER USER
     |--------------------------------------------------------------------------
     */
-    public function getUsers(): array
+    public function createUser(UserDTO $dto): array
     {
-        return $this->repo->getAll();
-    }
+        $errors = [];
 
-    /*
-    |--------------------------------------------------------------------------
-    | GET SINGLE USER
-    |--------------------------------------------------------------------------
-    */
-    public function getUser(int $id): ?array
-    {
-        return $this->repo->getById($id);
-    }
+        // =========================
+        // VALIDATION
+        // =========================
+        if (empty($dto->name)) {
+            $errors[] = 'Name is required';
+        }
 
-    /*
-    |--------------------------------------------------------------------------
-    | CREATE USER
-    |--------------------------------------------------------------------------
-    */
-    public function createUser(array $data): bool
-    {
-        // REMOVE confirm_password
-        unset($data['confirm_password']);
+        if (empty($dto->email)) {
+            $errors[] = 'Email is required';
+        }
 
-        // HASH PASSWORD
-        $data['password'] = password_hash(
-            $data['password'],
-            PASSWORD_BCRYPT
+        if (empty($dto->password)) {
+            $errors[] = 'Password is required';
+        }
+
+        // check email exists
+        if ($this->repo->findByEmail($dto->email)) {
+            $errors[] = 'Email already exists';
+        }
+
+        if (!empty($errors)) {
+            return ApiResponse::error(
+                'Validation failed',
+                $errors
+            );
+        }
+
+        // =========================
+        // SAVE TO DATABASE
+        // =========================
+        $created = $this->repo->create([
+            'name' => $dto->name,
+            'email' => $dto->email,
+            'password' => password_hash(
+                $dto->password,
+                PASSWORD_BCRYPT
+            )
+        ]);
+
+        if (!$created) {
+            return ApiResponse::error(
+                'User registration failed'
+            );
+        }
+
+        return ApiResponse::success(
+            null,
+            'User registered successfully'
         );
-
-        // SAVE USER
-        return $this->repo->create($data);
     }
 
     /*
@@ -58,31 +80,75 @@ class UserService
     | LOGIN USER
     |--------------------------------------------------------------------------
     */
-    public function login(string $email, string $password): ?array
-    {
-        // FIND USER BY EMAIL
-        $user = $this->repo->findByEmail($email);
-
-        // USER NOT FOUND
-        if (!$user) {
-            return null;
-        }
-
-        // VERIFY PASSWORD
-        if (!password_verify($password, $user['password'])) {
-            return null;
-        }
-
-        return $user;
+    public function login(UserDTO $dto): array
+{
+    // =========================
+    // VALIDATION
+    // =========================
+    if (empty($dto->email)) {
+        return ApiResponse::error(
+            'Validation failed',
+            ['Email is required']
+        );
     }
+
+    if (empty($dto->password)) {
+        return ApiResponse::error(
+            'Validation failed',
+            ['Password is required']
+        );
+    }
+
+    // =========================
+    // FIND USER (MODEL OBJECT)
+    // =========================
+    $user = $this->repo->findByEmail($dto->email);
+
+    if (
+        !$user ||
+        !password_verify(
+            $dto->password,
+            $user->getPasswordHash()
+        )
+    ) {
+        return ApiResponse::error(
+            'Invalid email or password'
+        );
+    }
+
+    // =========================
+    // SUCCESS RESPONSE
+    // =========================
+    return ApiResponse::success(
+        [
+            'id' => $user->getId(),
+            'name' => $user->getName(),
+            'email' => $user->getEmail()
+        ],
+        'Login successful'
+    );
+}
 
     /*
     |--------------------------------------------------------------------------
-    | DELETE USER
+    | GET ALL USERS
     |--------------------------------------------------------------------------
     */
-    public function deleteUser(int $id): bool
+    public function getAllUsers(): array
     {
-        return $this->repo->delete($id);
+        $rows = $this->repo->getAll();
+
+        $users = array_map(function ($row) {
+            return [
+                'id' => $row['id'],
+                'name' => $row['name'],
+                'email' => $row['email']
+            ];
+        }, $rows);
+
+        return ApiResponse::success(
+            $users,
+            'Users fetched successfully'
+        );
     }
 }
