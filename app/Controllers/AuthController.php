@@ -1,61 +1,94 @@
 <?php
 
-namespace App\Repositories;
+namespace App\Controllers;
 
-use App\Models\User;
+use App\Services\UserService;
+use App\DTO\UserDTO;
 
-class UserRepository extends BaseRepository
+class AuthController extends BaseController
 {
-    protected string $table = 'users';
-    protected string $primaryKey = 'id';
+    public function __construct(
+        private UserService $userService
+    ) {}
 
-    // =========================
-    // MAP ROW → MODEL
-    // =========================
-    private function map(array $row): User
+    public function showLogin(): void
     {
-        $user = new User();
+        // Safe view rendering without a hard lock guard while tuning home logic
+        $this->view('auth/login', [
+            'errors' => $_SESSION['errors'] ?? [],
+            'success' => $_SESSION['success'] ?? '',
+            'old' => $_SESSION['old'] ?? []
+        ]);
 
-        $user->setId((int)($row['id'] ?? 0));
-        $user->setName($row['name'] ?? '');
-        $user->setEmail($row['email'] ?? '');
-        $user->setPasswordHash($row['password'] ?? '');
-        $user->setCreatedAt($row['created_at'] ?? null);
-
-        return $user;
+        unset($_SESSION['errors'], $_SESSION['success'], $_SESSION['old']);
     }
 
-    // =========================
-    // FIND BY EMAIL
-    // =========================
-    public function findByEmail(string $email): ?User
+    public function showRegister(): void
     {
-        $row = $this->fetchOne(
-            "SELECT * FROM {$this->table} WHERE email = :email LIMIT 1",
-            ['email' => $email]
+        $this->view('auth/register', [
+            'errors' => $_SESSION['errors'] ?? [],
+            'old' => $_SESSION['old'] ?? []
+        ]);
+
+        unset($_SESSION['errors'], $_SESSION['old']);
+    }
+
+    /* LOGIN SUBMIT */
+    public function loginSubmit(): void
+    {
+        $dto = new UserDTO(
+            email: $_POST['email'] ?? '',
+            password: $_POST['password'] ?? ''
         );
 
-        return $row ? $this->map($row) : null;
+        $result = $this->userService->login($dto);
+
+        if (!$result['success']) {
+            $this->view('auth/login', [
+                'errors' => $result['errors'],
+                'old' => $_POST
+            ]);
+            return;
+        }
+
+        $_SESSION['user_id'] = $result['user']['id'];
+        $_SESSION['username'] = $result['user']['name'];
+      
+
+        header('Location: ' . BASE_URL . '/Public/index.php?page=home');
+        exit;
     }
 
-    // =========================
-    // FIND BY ID
-    // =========================
-    public function findById(int $id): ?User
+    /* REGISTER SUBMIT */
+    public function registerSubmit(): void
     {
-        $row = $this->getById($id);
-        return $row ? $this->map($row) : null;
+        $dto = new UserDTO(
+            name: $_POST['name'] ?? '',
+            email: $_POST['email'] ?? '',
+            password: $_POST['password'] ?? '',
+            confirmPassword: $_POST['confirm_password'] ?? ''
+        );
+
+        $result = $this->userService->register($dto);
+
+        if (!$result['success']) {
+            $this->view('auth/register', [
+                'errors' => $result['errors'],
+                'old' => $_POST
+            ]);
+            return;
+        }
+
+        $_SESSION['success'] = "Registration successful! Please sign in.";
+
+        header('Location: ' . BASE_URL . '/Public/index.php?page=login');
+        exit;
     }
 
-    // =========================
-    // INSERT USER
-    // =========================
-    public function insertUser(User $user): bool
+    public function logout(): void
     {
-        return $this->create([
-            'name' => $user->getName(),
-            'email' => $user->getEmail(),
-            'password' => $user->getPasswordHash(),
-        ]);
+        $this->userService->logout();
+        header('Location: ' . BASE_URL . '/Public/index.php?page=login');
+        exit;
     }
 }

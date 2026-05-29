@@ -27,8 +27,7 @@
             </div>
         <?php endif; ?>
 
-        <form method="post" action="/index.php?page=login-submit">
-
+<form method="post" action="<?= BASE_URL ?>/Public/index.php?page=login-submit">
             <!-- EMAIL -->
             <div class="field">
                 <label>Email address</label>

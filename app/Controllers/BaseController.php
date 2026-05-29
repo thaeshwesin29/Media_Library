@@ -59,37 +59,58 @@ abstract class BaseController
         return $_POST[$key] ?? $default;
     }
 
+    /**
+     * ✅ FIXED: Protects routes from non-logged-in sessions
+     */
     protected function requireLogin(): void
     {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
 
-        if (!isset($_SESSION['user'])) {
+        // Changed from 'user' to 'user_id'
+        if (!isset($_SESSION['user_id'])) {
             $_SESSION['error'] = 'Please login first';
-            $this->redirect('index.php?page=login');
+            // Configured explicit BASE_URL to prevent route drop
+            $this->redirect(BASE_URL . '/Public/index.php?page=login');
         }
     }
 
+    /**
+     * ✅ FIXED: Blocks logged-in users from revisiting login/register pages
+     */
     protected function guestOnly(): void
     {
-        if (isset($_SESSION['user'])) {
-            $this->redirect('index.php?page=catalog');
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        // Changed from 'user' to 'user_id'
+        if (isset($_SESSION['user_id'])) {
+            $this->redirect(BASE_URL . '/Public/index.php?page=home');
         }
     }
 
     /**
-     * Get current logged in user
+     * ✅ FIXED: Mapped to safe dynamic structure matching view expectations
      */
-   protected function user(): ?UserDTO
-{
-    return $_SESSION['user'] ?? null;
-}
+    protected function user(): ?array
+    {
+        if (isset($_SESSION['user_id'])) {
+            return [
+                'id'   => $_SESSION['user_id'],
+                'name' => $_SESSION['username'] ?? 'User'
+            ];
+        }
+
+        return null;
+    }
+
     /**
-     * Check authentication status
+     * ✅ FIXED: Changed to match active login session tracking array
      */
     protected function isLoggedIn(): bool
     {
-        return isset($_SESSION['user']);
+        return isset($_SESSION['user_id']);
     }
 }
