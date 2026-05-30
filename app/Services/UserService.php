@@ -2,13 +2,15 @@
 
 namespace App\Services;
 
-use App\Repositories\UserRepository;
-use App\Validation\Validator;
-use App\Request\RegisterUserRequest;
-use App\Request\LoginRequest;
 use App\DTO\UserDTO;
+use App\Exceptions\NotFoundException;
+use App\Exceptions\ValidationException;
 use App\Mappers\UserMapper;
 use App\Models\User;
+use App\Repositories\UserRepository;
+use App\Request\LoginRequest;
+use App\Request\RegisterUserRequest;
+use App\Validation\Validator;
 
 class UserService
 {
@@ -20,95 +22,77 @@ class UserService
     /* =========================
         REGISTER
     ========================= */
-    public function register(UserDTO $dto): array
-    {
-        $data = [
-            'name' => $dto->name,
-            'email' => $dto->email,
-            'password' => $dto->password,
-            'confirm_password' => $dto->confirmPassword
-        ];
+   public function register(UserDTO $dto): bool
+{
+    $data = [
+        'name' => $dto->name,
+        'email' => $dto->email,
+        'password' => $dto->password,
+        'confirm_password' => $dto->confirmPassword
+    ];
 
-        $errors = $this->validator->validate(
-                    $data,
-                    RegisterUserRequest::rules()
-                );
-        if (!empty($errors)) {
-            return [
-                'success' => false,
-                'errors' => $errors
-            ];
-        }
+    $errors = $this->validator->validate(
+        $data,
+        RegisterUserRequest::rules()
+    );
 
-        if ($this->repo->findByEmail($dto->email)) {
-            return [
-                'success' => false,
-                'errors' => [
-                    'email' => 'Email already exists'
-                ]
-            ];
-        }
-
-        // ⭐ MAPPER USED HERE
-        $user = UserMapper::toModel($dto);
-
-        // password hashing stays in service
-        $user->setPasswordHash(
-            password_hash($dto->password, PASSWORD_DEFAULT)
+    if (!empty($errors)) {
+        throw new ValidationException(
+            "Validation failed",
+            $errors
         );
-
-        $saved = $this->repo->insertUser($user);
-
-        return [
-            'success' => $saved
-        ];
     }
+
+    if ($this->repo->findByEmail($dto->email)) {
+        throw new ValidationException(
+            "Validation failed",
+            ['email' => 'Email already exists']
+        );
+    }
+
+    $user = UserMapper::toModel($dto);
+
+    $user->setPasswordHash(
+        password_hash($dto->password, PASSWORD_DEFAULT)
+    );
+
+    return $this->repo->insertUser($user);
+}
 
     /* =========================
         LOGIN
     ========================= */
-    public function login(UserDTO $dto): array
-    {
-        $data = [
-            'email' => $dto->email,
-            'password' => $dto->password
-        ];
+   public function login(UserDTO $dto): array
+{
+    $data = [
+        'email' => $dto->email,
+        'password' => $dto->password
+    ];
 
-        $errors = $this->validator->validate($data, LoginRequest::rules());
-        
-        if (!empty($errors)) {
-            return [
-                'success' => false,
-                'errors' => $errors
-            ];
-        }
+    $errors = $this->validator->validate($data, LoginRequest::rules());
 
-        $user = $this->repo->findByEmail($dto->email);
-
-        if (!$user) {
-            return [
-                'success' => false,
-                'errors' => [
-                    'email' => 'User not found'
-                ]
-            ];
-        }
-
-        if (!password_verify($dto->password, $user->getPasswordHash())) {
-            
-            return [
-                'success' => false,
-                'errors' => [
-                    'password' => 'Invalid password'
-                ]
-            ];
-        }
-
-        return [
-            'success' => true,
-            'user' => $user->toArray()
-        ];
+    if (!empty($errors)) {
+        throw new ValidationException(
+            "Validation failed",
+            $errors
+        );
     }
+
+    $user = $this->repo->findByEmail($dto->email);
+
+    if (!$user) {
+        throw new NotFoundException("User not found");
+    }
+
+    if (!password_verify($dto->password, $user->getPasswordHash())) {
+        throw new ValidationException(
+            "Invalid credentials",
+            ['password' => 'Invalid password']
+        );
+    }
+
+    return $user->toArray();
+}
 
     public function logout(): void
     {

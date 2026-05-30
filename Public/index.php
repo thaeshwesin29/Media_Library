@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', '1');
 
 /*
 |--------------------------------------------------------------------------
@@ -19,16 +19,26 @@ define('BASE_URL', 'http://localhost:8080');
 |--------------------------------------------------------------------------
 */
 require_once BASE_PATH . '/vendor/autoload.php';
+
 session_start();
 
 /*
 |--------------------------------------------------------------------------
-| ENV
+| ERROR HANDLING (IMPORTANT - MUST BE FIRST)
+|--------------------------------------------------------------------------
+*/
+use App\Error\ErrorHandler;
+
+ErrorHandler::register();
+
+/*
+|--------------------------------------------------------------------------
+| ENV LOADING (SAFE FIXED VERSION)
 |--------------------------------------------------------------------------
 */
 if (file_exists(BASE_PATH . '/.env')) {
     $dotenv = Dotenv\Dotenv::createImmutable(BASE_PATH);
-    $dotenv->load();
+    $dotenv->safeLoad(); // safer than load()
 }
 
 /*
@@ -68,8 +78,8 @@ $db = Database::connection();
 |--------------------------------------------------------------------------
 */
 $catalogRepo = new CatalogRepository($db);
-$formatRepo  = new FormatRepository($db);
-$userRepo    = new UserRepository($db);
+$formatRepo   = new FormatRepository($db);
+$userRepo     = new UserRepository($db);
 
 /*
 |--------------------------------------------------------------------------
@@ -80,12 +90,16 @@ $catalogService = new CatalogService($catalogRepo);
 $formatService  = new FormatService($formatRepo);
 
 /*
-| IMPORTANT FIX: ADD VALIDATOR
+|--------------------------------------------------------------------------
+| VALIDATOR
+|--------------------------------------------------------------------------
 */
 $validator = new Validator();
 
 /*
-| FIXED: UserService now requires 2 arguments
+|--------------------------------------------------------------------------
+| USER SERVICE
+|--------------------------------------------------------------------------
 */
 $userService = new UserService(
     $userRepo,
@@ -101,7 +115,7 @@ $router = new Router();
 
 /*
 |--------------------------------------------------------------------------
-| REGISTER SERVICES (IMPORTANT)
+| REGISTER SERVICES
 |--------------------------------------------------------------------------
 */
 $router->registerService(CatalogController::class, $catalogService);
@@ -124,4 +138,5 @@ require BASE_PATH . '/routes/api.php';
 |--------------------------------------------------------------------------
 */
 $page = $_GET['page'] ?? 'home';
+
 $router->dispatch($page);
