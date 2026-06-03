@@ -2,26 +2,25 @@
 
 namespace App\Repositories;
 
-use App\Models\User;
+use App\Domain\User\User;
 
 class UserRepository extends BaseRepository
 {
     protected string $table = 'users';
     protected string $primaryKey = 'id';
 
+    /* =========================
+        MAP DB → DOMAIN USER
+    ========================= */
     private function map(array $row): User
     {
-        $user = new User();
-
-        $user->setId((int)($row['id'] ?? 0));
-        $user->setName($row['name'] ?? '');
-        $user->setEmail($row['email'] ?? '');
-        $user->setPasswordHash($row['password'] ?? '');
-        $user->setCreatedAt($row['created_at'] ?? null);
-
-        return $user;
+        
+        return User::fromDatabase($row);
     }
 
+    /* =========================
+        FIND BY EMAIL
+    ========================= */
     public function findByEmail(string $email): ?User
     {
         $row = $this->fetchOne(
@@ -32,12 +31,18 @@ class UserRepository extends BaseRepository
         return $row ? $this->map($row) : null;
     }
 
+    /* =========================
+        FIND BY ID
+    ========================= */
     public function findById(int $id): ?User
     {
         $row = $this->getById($id);
         return $row ? $this->map($row) : null;
     }
 
+    /* =========================
+        INSERT USER
+    ========================= */
     public function insertUser(User $user): bool
     {
         return $this->create([
@@ -47,6 +52,9 @@ class UserRepository extends BaseRepository
         ]);
     }
 
+    /* =========================
+        DELETE USER
+    ========================= */
     public function deleteUser(int $id): bool
     {
         return $this->delete($id);

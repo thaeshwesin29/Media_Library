@@ -5,154 +5,106 @@ namespace App\Services;
 use App\Core\Database;
 use App\Repositories\CatalogRepository;
 use App\Interfaces\CatalogRepositoryInterface;
+use App\Domain\Catalog\CatalogQuery;
+use App\Domain\Catalog\Category;
+use App\Domain\Catalog\SearchTerm;
+use App\Domain\Catalog\CatalogPolicy;
 
 class CatalogService extends BaseService
 {
     private CatalogRepositoryInterface $repo;
+    private CatalogPolicy $policy;
 
-    public function __construct(
-        ?CatalogRepositoryInterface $repo = null
-    ) {
-
-        if ($repo === null) {
-
-            $repo = new CatalogRepository(
-                Database::getConnection()
-            );
-        }
-
-        $this->repo = $repo;
-    }
-
-    public function getHomePageData(): array
+    public function __construct(?CatalogRepositoryInterface $repo = null)
     {
-        return [
-            'random' => $this->repo->getRandom(),
-            'pageTitle' => 'Personal Media Library',
-            'section' => 'catalog'
-        ];
+        $this->repo = $repo ?? new CatalogRepository(
+            Database::getConnection()
+        );
+
+        // 🧠 DOMAIN POLICY INJECTED
+        $this->policy = new CatalogPolicy();
     }
 
-    public function getCatalogPage(
-        array $queryParams
-    ): array {
-
-        $section = $this->getCategory(
-            $queryParams
+    public function getCatalogPage(array $params): array
+    {
+        // 🧠 DOMAIN INPUT OBJECT
+        $query = new CatalogQuery(
+            new Category($params['cat'] ?? null),
+            new SearchTerm($params['s'] ?? null),
+            (int)($params['page'] ?? 1)
         );
 
-        $search = $this->getSearchTerm(
-            $queryParams
-        );
+        $limit = 10;
 
-        $currentPage = $this->getCurrentPage(
-            $queryParams
-        );
+        // 🧠 DOMAIN DECIDES EVERYTHING
+        $mode = $this->policy->resolveMode($query);
 
+        $page = $this->policy->normalizePage($query->page);
+        $offset = $this->policy->calculateOffset($page, $limit);
+
+        // COUNT (still repo, OK)
         $totalItems = $this->repo->count([
-            'category' => $section,
-            'search' => $search
+            'category' => $query->category->value(),
+            'search'   => $query->search->value()
         ]);
 
-        $pagination = $this->buildPagination(
-            $totalItems,
-            $currentPage
-        );
+        $pagination = $this->buildPagination($totalItems, $page);
 
-        $catalog = $this->loadCatalogData(
-            $section,
-            $search,
-            $pagination['limit'],
-            $pagination['offset']
-        );
+        // LOAD DATA (service only delegates)
+        $catalog = $this->loadByMode($mode, $query, $limit, $offset);
 
         return [
             'catalog' => $catalog,
-            'section' => $section,
-            'search' => $search,
+            'section' => $query->category->value(),
+            'search' => $query->search->value(),
             'currentPage' => $pagination['currentPage'],
             'totalPages' => $pagination['totalPages'],
-            'pageTitle' => $section
-                ? ucfirst($section)
-                : 'Full Catalog',
-
-            'queryString' => $this->buildQueryString(
-                $section,
-                $search
-            )
+            'pageTitle' => $query->category->value()
+                ? ucfirst($query->category->value())
+                : 'Full Catalog'
         ];
     }
 
-    private function loadCatalogData(
-        ?string $section,
-        ?string $search,
+    /**
+     * 🧠 SERVICE ONLY EXECUTES — NO LOGIC
+     */
+    private function loadByMode(
+        string $mode,
+        CatalogQuery $query,
         int $limit,
         int $offset
     ): array {
+        return match ($mode) {
 
-        if ($search !== null) {
+            CatalogPolicy::MODE_SEARCH =>
+                $this->repo->search(
+                    $query->search->value(),
+                    $query->category->value(),
+                    $limit,
+                    $offset
+                ),
 
-            return $this->repo->search(
-                $search,
-                $section,
-                $limit,
-                $offset
-            );
-        }
+            CatalogPolicy::MODE_CATEGORY =>
+                $this->repo->getByCategory(
+                    $query->category->value(),
+                    $limit,
+                    $offset
+                ),
 
-        if ($section !== null) {
-
-            return $this->repo->getByCategory(
-                $section,
-                $limit,
-                $offset
-            );
-        }
-
-        return $this->repo->getAll(
-            $limit,
-            $offset
-        );
+            default =>
+                $this->repo->getAll($limit, $offset),
+        };
     }
-
-    private function getCategory(
-        array $params
-    ): ?string {
-
-        $category = $params['cat'] ?? null;
-
-        $allowed = [
-            'books',
-            'movies',
-            'music'
-        ];
-
-        return in_array(
-            $category,
-            $allowed,
-            true
-        )
-            ? $category
-            : null;
-    }
-
-    private function getSearchTerm(
-        array $params
-    ): ?string {
-
-        $search = trim(
-            $params['s'] ?? ''
-        );
-
-        return $search !== ''
-            ? $search
-            : null;
-    }
-
-    public function getById(
-        int $id
-    ): ?array {
-
-        return $this->repo->getById($id);
-    }
+    public function getHomePageData(): array
+{
+    return [
+        'random' => $this->repo->getRandom(),
+        'pageTitle' => 'Personal Media Library',
+        'section' => 'catalog'
+    ];
+}
+public function getById(int $id): ?array
+{
+    return $this->repo->getById($id);
+}
 }

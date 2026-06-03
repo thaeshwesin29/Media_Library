@@ -19,28 +19,28 @@ class SuggestController
      * Display suggestion form
      */
     public function index(): void
-    {
-        $pageTitle  = "Suggest a Media Item";
-        $section    = "suggest";
-        $hideSearch = true;
+{
+    $pageTitle  = "Suggest a Media Item";
+    $section    = "suggest";
+    $hideSearch = true;
 
-        $error_message = null;
+    $error_message = null;
 
-        if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    if ($_SERVER["REQUEST_METHOD"] === "POST") {
+        $result = $this->handleForm();
 
-            $result = $this->handleForm();
-
-            if (!empty($result['error_message'])) {
-                $error_message = $result['error_message'];
-            }
+        if (!empty($result['error_message'])) {
+            $error_message = $result['error_message'];
         }
-
-        $categories = $this->formatService->category_drop_down();
-        $formats    = $this->formatService->format_array();
-        $genres     = $this->formatService->genres_array();
-
-        require BASE_PATH . '/resources/views/suggest.php';
     }
+
+    // ✅ FIXED: store results properly
+    $categories = $this->formatService->getCategories();
+    $formats    = $this->formatService->getFormats(null);
+    $genres     = $this->formatService->getGenres(null);
+
+    require BASE_PATH . '/resources/views/suggest.php';
+}
 
     /**
      * Handle form submission

@@ -155,12 +155,15 @@ abstract class BaseRepository implements BaseInterface
     // =========================
     // PAGINATION FIXED
     // =========================
-    protected function buildLimitOffset(?int $limit, int $offset): string
-    {
-        if ($limit === null) {
-            return '';
-        }
-
-        return " LIMIT {$limit} OFFSET {$offset} ";
+  protected function buildLimitOffset(?int $limit, int $offset): string
+{
+    if ($limit === null) {
+        return '';
     }
+
+    // 🧠 SAFETY FIX (PREVENT NEGATIVE OFFSET)
+    $offset = max(0, $offset);
+
+    return " LIMIT {$limit} OFFSET {$offset} ";
+}
 }
